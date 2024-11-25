@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI一键角色扮演</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/lib/highlight.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #7C4DFF;
+            --primary-light: #E8E3FF;
+            --secondary-color: #f8f9fa;
+            --text-color: #2c3e50;
+            --border-color: #e1e8ed;
+            --hover-color: #6B42E8;
+            --background-gradient: linear-gradient(135deg, #f5f7fa 0%, #E8E3FF 100%);
+            --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--background-gradient);
+            color: var(--text-color);
+            line-height: 1.6;
+            height: 100vh;
+            display: flex;
+        }
+
+        /* 左侧边栏样式 */
+        .sidebar {
+            width: 300px;
+            background-color: white;
+            border-right: 1px solid var(--border-color);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            box-shadow: var(--shadow-md);
+            z-index: 10;
+        }
+
+        .sidebar-header {
+            text-align: center;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--primary-light);
+        }
+
+        .sidebar-header h1 {
+            font-size: 1.5em;
+            color: var(--primary-color);
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .sidebar-header p {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .personality-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--secondary-color);
+            padding: 12px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+        }
+
+        select {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            color: var(--text-color);
+            background-color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        select:hover {
+            border-color: var(--primary-color);
+            box-shadow: var(--shadow-sm);
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        button:hover {
+            background-color: var(--hover-color);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* 主聊天区域 */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            margin: 20px;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        #chatMessages {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+            padding: 0 20px;
+        }
+
+        /* 消息基础样式 */
+        .message {
+            max-width: 70%;
+            padding: 16px 20px;
+            margin-bottom: 8px;
+            word-wrap: break-word;
+            animation: messagePopup 0.3s ease-out;
+        }
+
+        /* 用户消息样式 */
+        .user-message {
+            align-self: flex-end;
+            background: var(--primary-color);
+            color: white;
+            border-radius: var(--radius-md) var(--radius-md) 0 var(--radius-md);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* AI消息样式 */
+        .ai-message {
+            align-self: flex-start;
+            background: white;
+            border-left: 4px solid var(--primary-color);
+            border-radius: 0 var(--radius-md) var(--radius-md) var(--radius-md);
+            box-shadow: var(--shadow-md);
+        }
+
+        .ai-message .message-header {
+            font-size: 12px;
+            color: var(--primary-color);
+            padding: 4px 20px;
+            border-bottom: 1px solid var(--primary-light);
+            margin-bottom: 8px;
+        }
+
+        .ai-message .markdown-body {
+            font-size: 14px;
+            line-height: 1.6;
+            padding: 0 20px 16px;
+        }
+
+        /* 系统消息样式 */
+        .system-message {
+            align-self: center;
+            background: var(--primary-light);
+            color: var(--primary-color);
+            padding: 8px 16px;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            animation: messagePopup 0.3s ease-out;
+            margin: 8px 0;
+        }
+
+        /* 输入区域样式 */
+        .input-area {
+            background: white;
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+            width: 100%;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            width: 100%;
+        }
+
+        textarea {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-md);
+            resize: none;
+            font-family: inherit;
+            font-size: 14px;
+            line-height: 1.5;
+            min-height: 60px;
+            max-height: 150px;
+            transition: all 0.3s ease;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .input-group button {
+            padding: 12px 24px;
+            height: 46px;
+            white-space: nowrap;
+        }
+
+        /* 滚动条样式 */
+        .chat-container::-webkit-scrollbar,
+        #chatMessages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-container::-webkit-scrollbar-track,
+        #chatMessages::-webkit-scrollbar-track {
+            background: var(--secondary-color);
+            border-radius: 3px;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb,
+        #chatMessages::-webkit-scrollbar-thumb {
+            background: var(--primary-color);
+            border-radius: 3px;
+        }
+
+        /* 消息动画 */
+        @keyframes messagePopup {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 按钮样式 */
+        .personality-list-button {
+            background-color: white;
+            color: var(--primary-color);
+            border: 2px solid var(--primary-color);
+            padding: 12px;
+            border-radius: var(--radius-md);
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .personality-list-button:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* 角色列表模态框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .modal-content {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 25px;
+            border-radius: var(--radius-lg);
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-header h2 {
+            color: var(--text-color);
+            font-size: 1.5em;
+            margin: 0;
+        }
+
+        .close-button {
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            color: #666;
+            cursor: pointer;
+            padding: 0;
+            transition: color 0.3s;
+        }
+
+        .close-button:hover {
+            color: #333;
+        }
+
+        .personality-controls {
+            margin-bottom: 25px;
+        }
+
+        .personality-controls input,
+        .personality-controls textarea {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .personality-item {
+            background-color: var(--secondary-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 15px;
+            margin-bottom: 15px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .personality-item:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .personality-item strong {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--primary-color);
+        }
+
+        .personality-item button {
+            margin-top: 10px;
+            margin-right: 8px;
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+
+        /* Markdown样式优化 */
+        .markdown-body {
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .markdown-body pre {
+            background-color: #f6f8fa;
+            border-radius: var(--radius-md);
+            padding: 16px;
+            margin: 16px 0;
+        }
+
+        .markdown-body table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 16px 0;
+            background-color: white;
+        }
+
+        .markdown-body th,
+        .markdown-body td {
+            border: 1px solid var(--border-color);
+            padding: 10px;
+        }
+
+        .markdown-body th {
+            background-color: var(--secondary-color);
+            font-weight: 500;
+        }
+
+        .markdown-body tr:nth-child(even) {
+            background-color: var(--secondary-color);
+        }
+
+        .search-box {
+            margin: 15px 0;
+            width: 100%;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 8px 12px;
+            padding-left: 35px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .search-box::before {
+            content: "🔍";
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 14px;
+            color: #666;
+        }
+
+        .personality-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .personality-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .personality-list::-webkit-scrollbar-track {
+            background: var(--secondary-color);
+            border-radius: 4px;
+        }
+
+        .personality-list::-webkit-scrollbar-thumb {
+            background: var(--primary-color);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 左侧选择角色面板 -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h1>AI角色扮演</h1>
+            <p>选择角色开始对话</p>
+        </div>
+        <div class="personality-selector">
+            <select id="personality" class="form-control">
+                {% for key, value in personalities.items() %}
+                <option value="{{ key }}">{{ value.name }}</option>
+                {% endfor %}
+            </select>
+            <button onclick="openPersonalityManager()" title="管理角色">⚙️</button>
+        </div>
+        <button class="personality-list-button" onclick="openPersonalityList()">查看所有角色</button>
+    </div>
+
+    <!-- 主聊天区域 -->
+    <div class="main-content">
+        <div class="chat-container">
+            <div id="chatMessages"></div>
+            <div class="input-area">
+                <div class="input-group">
+                    <textarea id="userInput" placeholder="输入消息..." rows="3" onkeypress="if(event.keyCode==13 && !event.shiftKey) { event.preventDefault(); sendMessage(); }"></textarea>
+                    <button onclick="sendMessage()">发送</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 角色列表模态框 -->
+    <div id="listModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>选择角色</h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="searchInput" placeholder="搜索角色..." onkeyup="filterPersonalities()">
+                <div id="personalityListContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 角色管理模态框 -->
+    <div id="personalityModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>角色管理</h2>
+                <button class="close-button" onclick="closePersonalityManager()">&times;</button>
+            </div>
+            <div class="personality-controls">
+                <input type="text" id="newPersonalityId" placeholder="角色ID">
+                <input type="text" id="newPersonalityName" placeholder="角色名称">
+                <textarea id="newPersonalityPrompt" placeholder="角色设定" rows="4"></textarea>
+                <button onclick="addPersonality()">添加角色</button>
+            </div>
+            <div class="personality-list">
+                {% for key, value in personalities.items() %}
+                <div class="personality-item">
+                    <strong>{{ value.name }}</strong>
+                    <button onclick="editPersonality('{{ key }}')">编辑</button>
+                    <button onclick="deletePersonality('{{ key }}')">删除</button>
+                    <div>ID: {{ key }}</div>
+                    <div>提示词: {{ value.prompt }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 加载所有角色
+        async function loadPersonalities() {
+            try {
+                const response = await fetch('/api/personalities');
+                const personalities = await response.json();
+                const listElement = document.getElementById('personalityList');
+                listElement.innerHTML = '';
+
+                for (const [id, data] of Object.entries(personalities)) {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'personality-item';
+                    itemDiv.innerHTML = `
+                        <h3>${data.name}</h3>
+                        <div>
+                            <strong>ID:</strong> ${id}<br>
+                            <strong>提示词:</strong><br>
+                            <textarea readonly rows="3" style="width: 100%">${data.prompt}</textarea>
+                        </div>
+                        <div class="personality-actions">
+                            <button onclick="editPersonality('${id}')">编辑</button>
+                            <button class="delete" onclick="deletePersonality('${id}')">删除</button>
+                        </div>
+                    `;
+                    listElement.appendChild(itemDiv);
+                }
+            } catch (error) {
+                alert('加载角色列表失败: ' + error.message);
+            }
+        }
+
+        // 添加新角色
+        async function addPersonality() {
+            const id = document.getElementById('newPersonalityId').value.trim();
+            const name = document.getElementById('newPersonalityName').value.trim();
+            const prompt = document.getElementById('newPersonalityPrompt').value.trim();
+
+            if (!id || !name || !prompt) {
+                alert('请填写所有字段');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/personalities', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ id, name, prompt })
+                });
+
+                if (response.ok) {
+                    alert('添加成功');
+                    loadPersonalities();
+                    // 清空输入框
+                    document.getElementById('newPersonalityId').value = '';
+                    document.getElementById('newPersonalityName').value = '';
+                    document.getElementById('newPersonalityPrompt').value = '';
+                    closePersonalityManager();
+                } else {
+                    throw new Error('添加失败');
+                }
+            } catch (error) {
+                alert('添加角色失败: ' + error.message);
+            }
+        }
+
+        // 编辑角色
+        async function editPersonality(id) {
+            const name = prompt('请输入新的角色名称：');
+            if (name === null) return;
+
+            const prompt = prompt('请输入新的提示词：');
+            if (prompt === null) return;
+
+            try {
+                const response = await fetch(`/api/personalities/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name, prompt })
+                });
+
+                if (response.ok) {
+                    alert('更新成功');
+                    loadPersonalities();
+                } else {
+                    throw new Error('更新失败');
+                }
+            } catch (error) {
+                alert('更新角色失败: ' + error.message);
+            }
+        }
+
+        // 删除角色
+        async function deletePersonality(id) {
+            if (!confirm('确定要删除这个角色吗？')) return;
+
+            try {
+                const response = await fetch(`/api/personalities/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('删除成功');
+                    loadPersonalities();
+                } else {
+                    throw new Error('删除失败');
+                }
+            } catch (error) {
+                alert('删除角色失败: ' + error.message);
+            }
+        }
+
+        // 配置 marked
+        const renderer = new marked.Renderer();
+        // 禁用删除线效果，保持原文本
+        renderer.del = (text) => text;
+        
+        marked.setOptions({
+            renderer: renderer,
+            highlight: function(code, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    return hljs.highlight(code, { language: lang }).value;
+                }
+                return hljs.highlightAuto(code).value;
+            },
+            breaks: true,
+            gfm: true,
+            tables: true,
+            pedantic: false,
+            mangle: false,
+            headerIds: false
+        });
+
+        // 聊天相关功能
+        async function sendMessage() {
+            const userInput = document.getElementById('userInput');
+            const personality = document.getElementById('personality');
+            const chatMessages = document.getElementById('chatMessages');
+            
+            const message = userInput.value.trim();
+            if (!message) return;
+            
+            // 添加用户消息到聊天框
+            const userMessageDiv = document.createElement('div');
+            userMessageDiv.className = 'message user-message';
+            userMessageDiv.textContent = message;
+            chatMessages.appendChild(userMessageDiv);
+            
+            // 清空输入框
+            userInput.value = '';
+            
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        personality: personality.value
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // 添加AI回复到聊天框
+                    const aiMessageDiv = document.createElement('div');
+                    aiMessageDiv.className = 'message ai-message';
+                    
+                    let content = '';
+                    if (data.choices && data.choices[0] && data.choices[0].message) {
+                        content = data.choices[0].message.content;
+                        
+                        // 添加角色ID标题和markdown内容
+                        const header = document.createElement('div');
+                        header.className = 'message-header';
+                        header.textContent = personality.value; // 使用当前选中的角色ID
+                        
+                        const markdownBody = document.createElement('div');
+                        markdownBody.className = 'markdown-body';
+                        markdownBody.innerHTML = marked.parse(content);
+                        
+                        aiMessageDiv.appendChild(header);
+                        aiMessageDiv.appendChild(markdownBody);
+                        
+                        // 代码高亮
+                        aiMessageDiv.querySelectorAll('pre code').forEach((block) => {
+                            hljs.highlightElement(block);
+                        });
+                    } else {
+                        console.error('Unexpected API response format:', data);
+                        aiMessageDiv.textContent = '抱歉，响应格式异常';
+                    }
+                    
+                    chatMessages.appendChild(aiMessageDiv);
+                    
+                    // 滚动到最新消息
+                    aiMessageDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                } else {
+                    throw new Error(data.error || '发生错误');
+                }
+            } catch (error) {
+                alert('发送消息失败: ' + error.message);
+            }
+            
+            // 滚动到底部
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        // 支持按Enter发送消息
+        document.getElementById('userInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // 打开角色管理对话框
+        function openPersonalityManager() {
+            document.getElementById('personalityModal').style.display = 'block';
+            updatePersonalityList();
+        }
+
+        // 关闭角色管理对话框
+        function closePersonalityManager() {
+            document.getElementById('personalityModal').style.display = 'none';
+        }
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const listModal = document.getElementById('listModal');
+            const personalityModal = document.getElementById('personalityModal');
+            
+            if (event.target === listModal) {
+                listModal.style.display = 'none';
+            }
+            if (event.target === personalityModal) {
+                personalityModal.style.display = 'none';
+            }
+        }
+
+        // 更新成功后关闭模态框
+        function updatePersonalityList() {
+            fetch('/api/personalities')
+                .then(response => response.json())
+                .then(personalities => {
+                    // 更新选择框
+                    const select = document.getElementById('personality');
+                    select.innerHTML = '';
+                    Object.entries(personalities).forEach(([id, data]) => {
+                        const option = document.createElement('option');
+                        option.value = id;
+                        option.textContent = data.name;
+                        select.appendChild(option);
+                    });
+
+                    // 更新角色列表
+                    const personalityList = document.getElementById('personalityListContent');
+                    personalityList.innerHTML = '';
+                    Object.entries(personalities).forEach(([id, data]) => {
+                        const div = document.createElement('div');
+                        div.className = 'personality-item';
+                        div.setAttribute('data-id', id);
+                        div.setAttribute('data-name', data.name);
+                        div.innerHTML = `
+                            <strong>${data.name}</strong>
+                            <button onclick="switchPersonality('${id}')">选择</button>
+                            <button onclick="editPersonality('${id}')">编辑</button>
+                            <button onclick="deletePersonality('${id}')">删除</button>
+                            <div>ID: ${id}</div>
+                            <div>提示词: ${data.prompt}</div>
+                        `;
+                        personalityList.appendChild(div);
+                    });
+                })
+                .catch(error => console.error('获取角色列表失败:', error));
+        }
+
+        // 添加角色后关闭模态框
+        async function addPersonality() {
+            // ... 原有的添加逻辑 ...
+            closePersonalityManager();
+        }
+
+        // 删除角色后关闭模态框
+        async function deletePersonality(id) {
+            // ... 原有的删除逻辑 ...
+            closePersonalityManager();
+        }
+
+        // 添加新的角色列表相关函数
+        function openPersonalityList() {
+            document.getElementById('listModal').style.display = 'block';
+        }
+
+        function closePersonalityList() {
+            document.getElementById('listModal').style.display = 'none';
+        }
+
+        function filterPersonalities() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const items = document.querySelectorAll('#personalityListContent .personality-item');
+            
+            items.forEach(item => {
+                const id = item.getAttribute('data-id').toLowerCase();
+                const name = item.getAttribute('data-name').toLowerCase();
+                
+                if (id.includes(searchTerm) || name.includes(searchTerm)) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+
+        // 切换角色提示消息
+        async function switchPersonality(id) {
+            try {
+                const response = await fetch('/switch_personality', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ id: id })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    // 添加系统消息显示角色切换信息
+                    const systemMessageDiv = document.createElement('div');
+                    systemMessageDiv.className = 'message system-message';
+                    systemMessageDiv.textContent = `已切换到角色: ${data.name}`;
+                    chatMessages.appendChild(systemMessageDiv);
+                    
+                    // 添加AI欢迎消息
+                    const welcomeResponse = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: "你好，我是新的对话伙伴",
+                            personality: id
+                        })
+                    });
+                    
+                    const welcomeData = await welcomeResponse.json();
+                    if (welcomeResponse.ok) {
+                        const aiMessageDiv = document.createElement('div');
+                        aiMessageDiv.className = 'message ai-message';
+                        
+                        if (welcomeData.choices && welcomeData.choices[0] && welcomeData.choices[0].message) {
+                            const content = welcomeData.choices[0].message.content;
+                            
+                            // 添加角色ID标题和markdown内容
+                            const header = document.createElement('div');
+                            header.className = 'message-header';
+                            header.textContent = id; // 使用切换后的角色ID
+                            
+                            const markdownBody = document.createElement('div');
+                            markdownBody.className = 'markdown-body';
+                            markdownBody.innerHTML = marked.parse(content);
+                            
+                            aiMessageDiv.appendChild(header);
+                            aiMessageDiv.appendChild(markdownBody);
+                            
+                            aiMessageDiv.querySelectorAll('pre code').forEach((block) => {
+                                hljs.highlightElement(block);
+                            });
+                        }
+                        
+                        chatMessages.appendChild(aiMessageDiv);
+                        aiMessageDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    }
+                    
+                    // 关闭模态框
+                    closeModal();
+                } else {
+                    throw new Error(data.error || '切换角色失败');
+                }
+            } catch (error) {
+                alert('切换角色失败: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
