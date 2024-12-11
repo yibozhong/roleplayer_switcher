@@ -82,6 +82,129 @@
             border: 1px solid var(--border-color);
         }
 
+        .search-box {
+            position: relative;
+            margin-bottom: 12px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 10px 14px;
+            padding-right: 40px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+        }
+
+        .search-box button {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            padding: 4px;
+            cursor: pointer;
+            color: var(--text-color);
+        }
+
+        .search-results {
+            max-height: 300px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            margin-top: 4px;
+            display: none;
+        }
+
+        .search-results.active {
+            display: block;
+        }
+
+        .search-result-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .search-result-item:hover {
+            background: var(--secondary-color);
+        }
+
+        .search-result-item .result-type {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .search-result-item .result-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .edit-prompt-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+
+        .edit-prompt-modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: var(--radius-md);
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .form-group textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            resize: vertical;
+        }
+
         .select-group {
             display: flex;
             flex-direction: column;
@@ -503,6 +626,44 @@
             background: var(--primary-color);
             border-radius: 4px;
         }
+        
+        /* 角色分类样式 */
+        .personality-category {
+            margin-bottom: 20px;
+        }
+        
+        .personality-category h3 {
+            margin-bottom: 10px;
+        }
+        
+        .personality-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+        
+        .personality-card {
+            background-color: var(--secondary-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            cursor: pointer;
+        }
+        
+        .personality-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .personality-card h4 {
+            margin-bottom: 10px;
+        }
+        
+        .personality-prompt {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
@@ -513,20 +674,28 @@
             <p>选择Prompt类型和具体内容</p>
         </div>
         <div class="personality-selector">
+            <!-- 修改选择器部分 -->
             <div class="select-group">
                 <label class="select-label" for="promptTypeSelect">Prompt类型</label>
-                <select id="promptTypeSelect" onchange="loadPromptsByType()">
+                <select id="promptTypeSelect" onchange="handleTypeChange()">
                     <option value="">请选择Prompt类型</option>
+                    <option value="general">通用Prompt</option>
+                    <option value="category">角色大类</option>
+                    <option value="role">具体角色</option>
                 </select>
-                <div class="select-description" id="promptTypeDescription"></div>
             </div>
+
             <div class="select-group">
-                <label class="select-label" for="promptSelect">具体内容</label>
-                <select id="promptSelect" disabled>
-                    <option value="">请先选择Prompt类型</option>
+                <label class="select-label" for="promptSelect">具体Prompt</label>
+                <select id="promptSelect" onchange="handlePromptChange()" disabled>
+                    <option value="">请先选择类型</option>
                 </select>
-                <div class="select-description" id="promptDescription"></div>
+                <!-- 添加编辑按钮 -->
+                <button onclick="editSelectedPrompt()" class="edit-button" disabled>编辑当前Prompt</button>
             </div>
+
+            <!-- 添加新的按钮 -->
+            <button onclick="showAddPromptModal()" class="add-prompt-button">添加新Prompt</button>
         </div>
         <button class="personality-list-button" onclick="openPersonalityList()">查看所有角色</button>
     </div>
@@ -548,12 +717,14 @@
     <div id="listModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>选择角色</h2>
+                <h2>所有Prompts列表</h2>
                 <span class="close" onclick="closeModal()">&times;</span>
             </div>
             <div class="modal-body">
-                <input type="text" id="searchInput" placeholder="搜索角色..." onkeyup="filterPersonalities()">
-                <div id="personalityListContent"></div>
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="搜索..." onkeyup="filterPrompts()">
+                </div>
+                <div id="promptsList"></div>
             </div>
         </div>
     </div>
@@ -585,34 +756,80 @@
         </div>
     </div>
 
+    <!-- 修改编辑Prompt的模态框 -->
+    <div class="modal" id="addPromptModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>编辑Prompt</h2>
+                <button class="modal-close" onclick="closeAddPromptModal()">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="newPromptId">Prompt ID</label>
+                <input type="text" id="newPromptId" required>
+            </div>
+            <div class="form-group">
+                <label for="newPromptName">名称</label>
+                <input type="text" id="newPromptName" required>
+            </div>
+            <div class="form-group">
+                <label for="newPromptContent">内容</label>
+                <textarea id="newPromptContent" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="newPromptContext">背景知识（可选）</label>
+                <textarea id="newPromptContext"></textarea>
+            </div>
+            <button onclick="saveNewPrompt()" id="savePromptButton">保存</button>
+        </div>
+    </div>
+
     <script>
         // 加载所有角色
         async function loadPersonalities() {
             try {
                 const response = await fetch('/api/personalities');
                 const personalities = await response.json();
-                const listElement = document.getElementById('personalityList');
-                listElement.innerHTML = '';
-
-                for (const [id, data] of Object.entries(personalities)) {
-                    const itemDiv = document.createElement('div');
-                    itemDiv.className = 'personality-item';
-                    itemDiv.innerHTML = `
-                        <h3>${data.name}</h3>
-                        <div>
-                            <strong>ID:</strong> ${id}<br>
-                            <strong>提示词:</strong><br>
-                            <textarea readonly rows="3" style="width: 100%">${data.prompt}</textarea>
-                        </div>
-                        <div class="personality-actions">
-                            <button onclick="editPersonality('${id}')">编辑</button>
-                            <button class="delete" onclick="deletePersonality('${id}')">删除</button>
-                        </div>
-                    `;
-                    listElement.appendChild(itemDiv);
+                
+                const personalityList = document.getElementById('personalityList');
+                personalityList.innerHTML = '';
+                
+                // 按分类组织角色
+                const categorizedRoles = {};
+                for (const [id, role] of Object.entries(personalities)) {
+                    const categoryName = role.categoryName;
+                    if (!categorizedRoles[categoryName]) {
+                        categorizedRoles[categoryName] = [];
+                    }
+                    categorizedRoles[categoryName].push(role);
+                }
+                
+                // 按分类显示角色
+                for (const [category, roles] of Object.entries(categorizedRoles)) {
+                    // 添加分类标题
+                    const categoryDiv = document.createElement('div');
+                    categoryDiv.className = 'personality-category';
+                    categoryDiv.innerHTML = `<h3>${category}</h3>`;
+                    personalityList.appendChild(categoryDiv);
+                    
+                    // 添加该分类下的所有角色
+                    const rolesDiv = document.createElement('div');
+                    rolesDiv.className = 'personality-grid';
+                    
+                    for (const role of roles) {
+                        const roleDiv = document.createElement('div');
+                        roleDiv.className = 'personality-card';
+                        roleDiv.innerHTML = `
+                            <h4>${role.name}</h4>
+                            <p class="personality-prompt">${role.prompt}</p>
+                            <button onclick="selectPersonality('${role.id}')">选择</button>
+                        `;
+                        rolesDiv.appendChild(roleDiv);
+                    }
+                    
+                    personalityList.appendChild(rolesDiv);
                 }
             } catch (error) {
-                alert('加载角色列表失败: ' + error.message);
+                console.error('加载角色列表失败:', error);
             }
         }
 
@@ -769,7 +986,7 @@
             }
         }
         
-        // 支持按Enter发送消息
+        // ��持按Enter发送消息
         document.getElementById('userInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -838,7 +1055,7 @@
                 .catch(error => console.error('获取角色列表失败:', error));
         }
 
-        // 添加角色后关闭模态框
+        // 添加角色后关闭模态���
         async function addPersonality() {
             // ... 原有的添加逻辑 ...
             closePersonalityManager();
@@ -852,7 +1069,16 @@
 
         // 添加新的角色列表相关函数
         function openPersonalityList() {
-            document.getElementById('listModal').style.display = 'block';
+            const modal = document.getElementById('listModal');
+            if (!modal) {
+                console.error('未找到listModal元素');
+                return;
+            }
+            modal.style.display = 'block';
+            loadAllPrompts().catch(error => {
+                console.error('加载列表失败:', error);
+                alert('加载列表失败，请重试');
+            });
         }
 
         function closePersonalityList() {
@@ -888,7 +1114,7 @@
                 
                 const data = await response.json();
                 if (response.ok) {
-                    // 添加系统消息显示角色切换信息
+                    // 添加系统消息显示角��切换信息
                     const systemMessageDiv = document.createElement('div');
                     systemMessageDiv.className = 'message system-message';
                     systemMessageDiv.textContent = `已切换到角色: ${data.name}`;
@@ -1013,6 +1239,344 @@
 
         // 页面加载时初始化prompt类型列表
         document.addEventListener('DOMContentLoaded', loadPromptTypes);
+
+        let currentEditingPrompt = null;
+
+        async function handleSearchInput(event) {
+            if (event.key === 'Enter') {
+                await searchPrompts();
+            }
+        }
+
+        async function searchPrompts() {
+            const searchInput = document.getElementById('promptSearch');
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            try {
+                const response = await fetch(`/api/prompts/search?q=${encodeURIComponent(query)}`);
+                const results = await response.json();
+                
+                const searchResults = document.getElementById('searchResults');
+                searchResults.innerHTML = '';
+                searchResults.classList.add('active');
+
+                const typeNames = {
+                    'general': '通用Prompt',
+                    'category': '角色大类',
+                    'role': '具体角色'
+                };
+
+                for (const type in results) {
+                    for (const [id, prompt] of Object.entries(results[type])) {
+                        const div = document.createElement('div');
+                        div.className = 'search-result-item';
+                        
+                        let displayType = typeNames[type];
+                        if (type === 'role' && prompt.categoryName) {
+                            displayType = prompt.categoryName;
+                        }
+                        
+                        div.innerHTML = `
+                            <div class="result-type">${displayType}</div>
+                            <div class="result-name">${prompt.name}</div>
+                        `;
+                        div.onclick = () => selectSearchResult(type, id);
+                        searchResults.appendChild(div);
+                    }
+                }
+            } catch (error) {
+                console.error('搜索失败:', error);
+            }
+        }
+
+        function selectSearchResult(type, id) {
+            const typeSelect = document.getElementById('promptTypeSelect');
+            const promptSelect = document.getElementById('promptSelect');
+            
+            typeSelect.value = type;
+            loadPromptsByType().then(() => {
+                promptSelect.value = `${type}:${id}`;
+                document.getElementById('searchResults').classList.remove('active');
+            });
+        }
+
+        async function editCurrentPrompt() {
+            const promptSelect = document.getElementById('promptSelect');
+            if (!promptSelect.value) {
+                alert('请先选择一个prompt');
+                return;
+            }
+
+            const [type, id] = promptSelect.value.split(':');
+            try {
+                const response = await fetch(`/api/prompts/${type}/${id}`);
+                const prompt = await response.json();
+
+                document.getElementById('promptContent').value = prompt.prompt || '';
+                document.getElementById('contextContent').value = prompt.context || '';
+                
+                currentEditingPrompt = { type, id };
+                document.getElementById('editPromptModal').classList.add('active');
+            } catch (error) {
+                console.error('获取prompt详情失败:', error);
+                alert('获取prompt详情失败');
+            }
+        }
+
+        function closeEditModal() {
+            document.getElementById('editPromptModal').classList.remove('active');
+            currentEditingPrompt = null;
+        }
+
+        async function savePromptChanges() {
+            if (!currentEditingPrompt) return;
+
+            const promptContent = document.getElementById('promptContent').value;
+            const contextContent = document.getElementById('contextContent').value;
+            const nameContent = document.getElementById('newPromptName').value;  // 添加name字段
+
+            try {
+                const response = await fetch(
+                    `/api/prompts/${currentEditingPrompt.type}/${currentEditingPrompt.id}`,
+                    {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            name: nameContent,     // 添加name
+                            prompt: promptContent, // 保持与后端参数名一致
+                            context: contextContent
+                        })
+                    }
+                );
+
+                if (response.ok) {
+                    alert('保存成功');
+                    closeEditModal();
+                    // 刷新当前选择的prompt
+                    await loadPromptsByType();
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.error || '保存失败');
+                }
+            } catch (error) {
+                console.error('保存更改失败:', error);
+                alert(error.message || '保存失败');
+            }
+        }
+
+        // 点击模态框外部关闭
+        document.getElementById('editPromptModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeEditModal();
+            }
+        });
+
+        // 添加新的JavaScript函数
+        async function handleTypeChange() {
+            const typeSelect = document.getElementById('promptTypeSelect');
+            const promptSelect = document.getElementById('promptSelect');
+            
+            promptSelect.disabled = true;
+            promptSelect.innerHTML = '<option value="">请选择Prompt</option>';
+            
+            if (!typeSelect.value) return;
+            
+            try {
+                const response = await fetch(`/api/prompts/${typeSelect.value}`);
+                const prompts = await response.json();
+                
+                for (const [id, prompt] of Object.entries(prompts)) {
+                    const option = document.createElement('option');
+                    option.value = `${typeSelect.value}:${id}`;
+                    option.textContent = prompt.name;
+                    option.dataset.description = prompt.prompt.substring(0, 100) + '...';
+                    promptSelect.appendChild(option);
+                }
+                
+                promptSelect.disabled = false;
+            } catch (error) {
+                console.error('加载Prompt列表失败:', error);
+            }
+        }
+
+        function showAddPromptModal() {
+            document.getElementById('addPromptModal').style.display = 'block';
+        }
+
+        function closeAddPromptModal() {
+            document.getElementById('addPromptModal').style.display = 'none';
+        }
+
+        async function saveNewPrompt() {
+            const typeSelect = document.getElementById('promptTypeSelect');
+            const promptId = document.getElementById('newPromptId');
+            
+            const data = {
+                id: promptId.value,
+                name: document.getElementById('newPromptName').value,
+                prompt: document.getElementById('newPromptContent').value,
+                context: document.getElementById('newPromptContext').value,
+                type: typeSelect.value
+            };
+
+            const isEdit = promptId.disabled;
+            const url = isEdit ? `/api/prompts/${data.type}/${data.id}` : '/api/prompts';
+            const method = isEdit ? 'PUT' : 'POST';
+            
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    alert(isEdit ? '修改成功' : '添加成功');
+                    closeAddPromptModal();
+                    handleTypeChange(); // 刷新prompt列表
+                    
+                    // 重置表单
+                    promptId.disabled = false;
+                    document.querySelector('#addPromptModal .modal-header h2').textContent = '添加新Prompt';
+                    document.querySelector('#addPromptModal button:last-child').textContent = '保存';
+                } else {
+                    alert(isEdit ? '修改失败' : '添加失败');
+                }
+            } catch (error) {
+                console.error('操作失败:', error);
+                alert('操作失败');
+            }
+        }
+
+        // 添加编辑相关函数
+        async function editSelectedPrompt() {
+            const promptSelect = document.getElementById('promptSelect');
+            if (!promptSelect.value) {
+                alert('请先选择一个prompt');
+                return;
+            }
+
+            const [type, id] = promptSelect.value.split(':');
+            try {
+                const response = await fetch(`/api/prompts/${type}/${id}`);
+                const prompt = await response.json();
+
+                document.getElementById('newPromptId').value = id;
+                document.getElementById('newPromptName').value = prompt.name;
+                document.getElementById('newPromptContent').value = prompt.prompt;
+                document.getElementById('newPromptContext').value = prompt.context || '';
+                
+                // 修改模态框标题和按钮
+                document.querySelector('#addPromptModal .modal-header h2').textContent = '编辑Prompt';
+                document.querySelector('#addPromptModal button:last-child').textContent = '保存修改';
+                
+                // 禁用ID输入框
+                document.getElementById('newPromptId').disabled = true;
+                
+                showAddPromptModal();
+            } catch (error) {
+                console.error('获取prompt详情失败:', error);
+                alert('获取prompt详情失败');
+            }
+        }
+
+        // 修改handlePromptChange函数
+        function handlePromptChange() {
+            const promptSelect = document.getElementById('promptSelect');
+            const editButton = document.querySelector('.edit-button');
+            editButton.disabled = !promptSelect.value;
+        }
+
+        // 替换原有的loadPersonalities函数
+        async function loadAllPrompts() {
+            try {
+                const types = ['general', 'category', 'role'];
+                const typeNames = {
+                    'general': '通用Prompt',
+                    'category': '角色大类',
+                    'role': '具体角色'
+                };
+                
+                const promptsList = document.getElementById('promptsList');
+                promptsList.innerHTML = '';
+                
+                for (const type of types) {
+                    const response = await fetch(`/api/prompts/${type}`);
+                    const prompts = await response.json();
+                    
+                    const section = document.createElement('div');
+                    section.className = 'prompt-section';
+                    section.innerHTML = `<h3>${typeNames[type]}</h3>`;
+                    
+                    const promptGrid = document.createElement('div');
+                    promptGrid.className = 'personality-grid';
+                    
+                    for (const [id, prompt] of Object.entries(prompts)) {
+                        const card = document.createElement('div');
+                        card.className = 'personality-card';
+                        card.innerHTML = `
+                            <h4>${prompt.name}</h4>
+                            <p class="personality-prompt">${prompt.prompt.substring(0, 100)}...</p>
+                            <button onclick="selectPrompt('${type}', '${id}')">选择</button>
+                        `;
+                        promptGrid.appendChild(card);
+                    }
+                    
+                    section.appendChild(promptGrid);
+                    promptsList.appendChild(section);
+                }
+            } catch (error) {
+                console.error('加载Prompt列表失败:', error);
+            }
+        }
+
+        // 修改openPersonalityList函数
+        function openPersonalityList() {
+            const modal = document.getElementById('listModal');
+            if (!modal) {
+                console.error('未找到listModal元素');
+                return;
+            }
+            modal.style.display = 'block';
+            loadAllPrompts().catch(error => {
+                console.error('加载列表失败:', error);
+                alert('加载列表失败，请重试');
+            });
+        }
+
+        // 添加选择prompt的函数
+        async function selectPrompt(type, id) {
+            const typeSelect = document.getElementById('promptTypeSelect');
+            const promptSelect = document.getElementById('promptSelect');
+            
+            typeSelect.value = type;
+            await handleTypeChange();
+            promptSelect.value = `${type}:${id}`;
+            
+            closeModal();
+        }
+
+        // 修改过滤函数
+        function filterPrompts() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const cards = document.querySelectorAll('.personality-card');
+            
+            cards.forEach(card => {
+                const name = card.querySelector('h4').textContent.toLowerCase();
+                const prompt = card.querySelector('p').textContent.toLowerCase();
+                
+                if (name.includes(searchTerm) || prompt.includes(searchTerm)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
     </script>
 </body>
 </html>

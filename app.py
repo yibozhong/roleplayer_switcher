@@ -7,6 +7,18 @@ from personality_manager import PersonalityManager
 # 加载环境变量
 load_dotenv()
 
+# 检查必要的配置文��是否存在
+required_configs = [
+    'config/general_prompts.json',
+    'config/category_prompts.json',
+    'config/role_prompts.json',
+    'config/prompt_context.json'
+]
+
+for config_file in required_configs:
+    if not os.path.exists(config_file):
+        raise FileNotFoundError(f"缺少必要的配置文件: {config_file}")
+
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['JSON_AS_ASCII'] = False
 personality_manager = PersonalityManager()
@@ -43,10 +55,14 @@ def chat():
     if not prompt:
         return jsonify({'error': '未找到指定的prompt'}), 404
     
-    # 获取prompt内容
-    prompt_content = prompt.get('prompt')
-    if not prompt_content:
-        return jsonify({'error': '获取prompt内容失败'}), 500
+    # 获取prompt内容和上下文
+    prompt_content = prompt.get('prompt', '')
+    context = prompt.get('context', '')
+    
+    # 组合prompt和上下文
+    system_message = prompt_content
+    if context:
+        system_message = f"背景信息：{context}\n\n角色设定：{prompt_content}"
 
     # 调用Deepseek API
     api_key = os.getenv('DEEPSEEK_API_KEY')
@@ -61,7 +77,7 @@ def chat():
     payload = {
         'model': 'deepseek-chat',
         'messages': [
-            {'role': 'system', 'content': prompt_content},
+            {'role': 'system', 'content': system_message},
             {'role': 'user', 'content': user_message}
         ]
     }
@@ -77,23 +93,43 @@ def chat():
     except requests.exceptions.RequestException as e:
         return jsonify({'error': str(e)}), 500
 
-# 添加管理角色的API端点
-@app.route('/api/personalities', methods=['GET', 'POST'])
-def manage_personalities():
-    if request.method == 'GET':
-        return jsonify(personality_manager.get_all_roles())
+# 获取所有角色列表
+@app.route('/api/personalities', methods=['GET'])
+def get_personalities():
+    """获取所有角色列表"""
+    roles = personality_manager.get_all_roles()
+    categories = personality_manager.get_all_categories()
     
-    if request.method == 'POST':
-        data = request.json
-        personality_id = data.get('id')
-        name = data.get('name')
-        prompt = data.get('prompt')
+    # 为每个角色添加分类名称
+    result = {}
+    for role_id, role in roles.items():
+        category_id = role.get('category')
+        if category_id:
+            category = categories.get(category_id, {})
+            role_info = {
+                'id': role_id,
+                'name': role.get('name', ''),
+                'category': category_id,
+                'categoryName': category.get('name', '未分类'),
+                'prompt': role.get('prompt', '')
+            }
+            result[role_id] = role_info
+    
+    return jsonify(result)
+
+# 添加管理角色的API端点
+@app.route('/api/personalities', methods=['POST'])
+def manage_personalities():
+    data = request.json
+    personality_id = data.get('id')
+    name = data.get('name')
+    prompt = data.get('prompt')
         
-        if not all([personality_id, name, prompt]):
-            return jsonify({'error': '缺少必要的字段'}), 400
+    if not all([personality_id, name, prompt]):
+        return jsonify({'error': '缺少必要的字段'}), 400
         
-        personality_manager.add_role(personality_id, name, prompt)
-        return jsonify({'message': '添加成功'}), 201
+    personality_manager.add_role(personality_id, name, prompt)
+    return jsonify({'message': '添加成功'}), 201
 
 @app.route('/api/personalities/<personality_id>', methods=['PUT', 'DELETE'])
 def update_delete_personality(personality_id):
@@ -111,23 +147,11 @@ def update_delete_personality(personality_id):
             return jsonify({'message': '删除成功'})
         return jsonify({'error': '未找到指定角色'}), 404
 
-@app.route('/api/categories', methods=['GET'])
-def get_categories():
-    """获取所有角色分类"""
-    return jsonify(personality_manager.get_all_categories())
-
-@app.route('/api/categories/<category_id>/roles', methods=['GET'])
-def get_roles_by_category(category_id):
-    """获取指定分类下的所有角色"""
-    roles = personality_manager.get_all_roles()
-    category_roles = {id: role for id, role in roles.items() if role.get('category') == category_id}
-    return jsonify(category_roles)
-
 @app.route('/api/prompt_types', methods=['GET'])
 def get_prompt_types():
     """获取所有prompt类型"""
     return jsonify({
-        'general': {'name': '通用Prompt', 'description': '基础AI设定和行为准则'},
+        'general': {'name': '通用Prompt', 'description': '基础AI设���和行为准则'},
         'category': {'name': '角色大类Prompt', 'description': '不同类型角色的共同特征'},
         'role': {'name': '具体角色Prompt', 'description': '特定角色的个性化设定'}
     })
@@ -143,6 +167,71 @@ def get_prompts_by_type(type):
         return jsonify(personality_manager.get_all_roles())
     else:
         return jsonify({'error': '无效的prompt类型'}), 400
+
+@app.route('/api/prompts/search', methods=['GET'])
+def search_prompts():
+    """搜索prompts"""
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify({'error': '搜索关键词不能为空'}), 400
+    
+    results = personality_manager.search_prompts(query)
+    return jsonify(results)
+
+@app.route('/api/prompts/<prompt_type>/<prompt_id>', methods=['GET', 'PUT'])
+def manage_prompt(prompt_type, prompt_id):
+    """获取或更新prompt信息"""
+    if request.method == 'GET':
+        if prompt_type == 'general':
+            prompt = personality_manager.get_general_prompt(prompt_id)
+        elif prompt_type == 'category':
+            prompt = personality_manager.get_category(prompt_id)
+        elif prompt_type == 'role':
+            prompt = personality_manager.get_role(prompt_id)
+        else:
+            return jsonify({'error': '无效的prompt类型'}), 400
+        
+        if not prompt:
+            return jsonify({'error': '未找到指定的prompt'}), 404
+        
+        return jsonify(prompt)
+    
+    elif request.method == 'PUT':
+        data = request.json
+        if not data:
+            return jsonify({'error': '请提供更新内容'}), 400
+        
+        try:
+            if prompt_type == 'general':
+                success = personality_manager.update_general_prompt(
+                    prompt_id, 
+                    name=data.get('name'),
+                    prompt=data.get('prompt'),  # 修改这里：prompt_content -> prompt
+                    context=data.get('context', '')  # 确保context为空字符串而不是None
+                )
+            elif prompt_type == 'category':
+                success = personality_manager.update_category_prompt(
+                    prompt_id, 
+                    name=data.get('name'),
+                    prompt=data.get('prompt'),  # 修改这里：prompt_content -> prompt
+                    context=data.get('context', '')  # 确保context为空字符串而不是None
+                )
+            elif prompt_type == 'role':
+                success = personality_manager.update_role_prompt(
+                    prompt_id, 
+                    name=data.get('name'),
+                    prompt=data.get('prompt'),  # 修改这里：prompt_content -> prompt
+                    context=data.get('context', '')  # 确保context为空字符串而不是None
+                )
+            else:
+                return jsonify({'error': '无效的prompt类型'}), 400
+
+            if success:
+                return jsonify({'message': '更新成功'})
+            return jsonify({'error': '更新失败'}), 400
+            
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
 
 @app.route('/switch_personality', methods=['POST'])
 def switch_personality():
@@ -165,6 +254,30 @@ def switch_personality():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# 修改添加prompt的路由
+@app.route('/api/prompts', methods=['POST'])
+def add_prompt():
+    """添加新的prompt"""
+    data = request.json
+    prompt_type = data.get('type')
+    
+    try:
+        if prompt_type == 'general':
+            personality_manager.add_general_prompt(
+                data['id'], data['name'], data['prompt'], data.get('context'))
+        elif prompt_type == 'category':
+            personality_manager.add_category_prompt(
+                data['id'], data['name'], data['prompt'], data.get('context'))
+        elif prompt_type == 'role':
+            personality_manager.add_role(
+                data['id'], data['name'], data['prompt'], data.get('context'))
+        else:
+            return jsonify({'error': '无效的prompt类型'}), 400
+        
+        return jsonify({'message': '添加成功'}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 if __name__ == '__main__':
     app.run(debug=True)
