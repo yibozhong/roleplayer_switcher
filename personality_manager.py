@@ -20,7 +20,7 @@ class PersonalityManager:
             print(f"错误: 找不到配置文件 {filepath}")
             raise FileNotFoundError(f"配置文件 {filepath} 不存在")
         except json.JSONDecodeError:
-            print(f"错误: 配置文件 {filepath} 格式不正确")
+            print(f"错误: 配��文件 {filepath} 格式不正确")
             raise json.JSONDecodeError(f"配置文件 {filepath} 格式不正确")
 
     def _save_config(self, data, filename):
@@ -317,4 +317,37 @@ class PersonalityManager:
             self._save_prompt_context('role', prompt_id, context)
         
         self._save_config(self.role_prompts, 'role_prompts.json')
+        return True
+
+    def _get_context(self, prompt_name):
+        """直接通过prompt名称获取背景知识"""
+        return self.prompt_context.get(prompt_name, '')
+
+    def _save_context(self, prompt_name, context):
+        """保存prompt的背景知识"""
+        self.prompt_context[prompt_name] = context
+        self._save_config(self.prompt_context, 'prompt_context.json')
+        return True
+
+    def update_prompt(self, prompt_type, name, content, context=''):
+        """统一的更新prompt方法"""
+        prompt_data = {
+            "name": name,
+            "prompt": content
+        }
+        
+        if prompt_type == 'general':
+            self.general_prompts[name] = prompt_data
+            self._save_config(self.general_prompts, 'general_prompts.json')
+        elif prompt_type == 'category':
+            self.category_prompts[name] = prompt_data
+            self._save_config(self.category_prompts, 'category_prompts.json')
+        elif prompt_type == 'role':
+            self.role_prompts[name] = prompt_data
+            self._save_config(self.role_prompts, 'role_prompts.json')
+        else:
+            return False
+            
+        if context is not None:
+            self._save_context(name, context)
         return True

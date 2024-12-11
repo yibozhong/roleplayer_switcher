@@ -760,12 +760,8 @@
     <div class="modal" id="addPromptModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>编辑Prompt</h2>
+                <h2>添加新Prompt</h2>
                 <button class="modal-close" onclick="closeAddPromptModal()">&times;</button>
-            </div>
-            <div class="form-group">
-                <label for="newPromptId">Prompt ID</label>
-                <input type="text" id="newPromptId" required>
             </div>
             <div class="form-group">
                 <label for="newPromptName">名称</label>
@@ -986,7 +982,7 @@
             }
         }
         
-        // ��持按Enter发送消息
+        // 支持按Enter发送消息
         document.getElementById('userInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -1055,7 +1051,7 @@
                 .catch(error => console.error('获取角色列表失败:', error));
         }
 
-        // 添加角色后关闭模态���
+        // 添加角色后关闭模态框
         async function addPersonality() {
             // ... 原有的添加逻辑 ...
             closePersonalityManager();
@@ -1114,7 +1110,7 @@
                 
                 const data = await response.json();
                 if (response.ok) {
-                    // 添加系统消息显示角��切换信息
+                    // 添加系统消息显示角色切换信息
                     const systemMessageDiv = document.createElement('div');
                     systemMessageDiv.className = 'message system-message';
                     systemMessageDiv.textContent = `已切换到角色: ${data.name}`;
@@ -1402,7 +1398,19 @@
             }
         }
 
-        function showAddPromptModal() {
+        function showAddPromptModal(isEdit = false) {
+            // 清空表单
+            document.getElementById('newPromptName').value = '';
+            document.getElementById('newPromptContent').value = '';
+            document.getElementById('newPromptContext').value = '';
+            
+            // 更改模态框标题和按钮文本
+            document.querySelector('#addPromptModal .modal-header h2').textContent = 
+                isEdit ? '编辑Prompt' : '添加新Prompt';
+            document.querySelector('#addPromptModal button#savePromptButton').textContent = 
+                isEdit ? '保存修改' : '添加';
+            
+            // 显示模态框
             document.getElementById('addPromptModal').style.display = 'block';
         }
 
@@ -1412,26 +1420,30 @@
 
         async function saveNewPrompt() {
             const typeSelect = document.getElementById('promptTypeSelect');
-            const promptId = document.getElementById('newPromptId');
+            const isEdit = document.querySelector('#addPromptModal .modal-header h2')
+                .textContent.includes('编辑');
             
             const data = {
-                id: promptId.value,
                 name: document.getElementById('newPromptName').value,
                 prompt: document.getElementById('newPromptContent').value,
                 context: document.getElementById('newPromptContext').value,
                 type: typeSelect.value
             };
 
-            const isEdit = promptId.disabled;
-            const url = isEdit ? `/api/prompts/${data.type}/${data.id}` : '/api/prompts';
+            if (!data.name || !data.prompt || !data.type) {
+                alert('请填写必要字段');
+                return;
+            }
+
             const method = isEdit ? 'PUT' : 'POST';
+            const url = isEdit ? 
+                `/api/prompts/${data.type}/${encodeURIComponent(data.name)}` : 
+                '/api/prompts';
             
             try {
                 const response = await fetch(url, {
                     method: method,
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
                 
@@ -1439,17 +1451,12 @@
                     alert(isEdit ? '修改成功' : '添加成功');
                     closeAddPromptModal();
                     handleTypeChange(); // 刷新prompt列表
-                    
-                    // 重置表单
-                    promptId.disabled = false;
-                    document.querySelector('#addPromptModal .modal-header h2').textContent = '添加新Prompt';
-                    document.querySelector('#addPromptModal button:last-child').textContent = '保存';
                 } else {
-                    alert(isEdit ? '修改失败' : '添加失败');
+                    throw new Error(isEdit ? '修改失败' : '添加失败');
                 }
             } catch (error) {
                 console.error('操作失败:', error);
-                alert('操作失败');
+                alert(error.message);
             }
         }
 
@@ -1462,27 +1469,26 @@
             }
 
             const [type, id] = promptSelect.value.split(':');
-            try {
-                const response = await fetch(`/api/prompts/${type}/${id}`);
-                const prompt = await response.json();
-
-                document.getElementById('newPromptId').value = id;
-                document.getElementById('newPromptName').value = prompt.name;
-                document.getElementById('newPromptContent').value = prompt.prompt;
-                document.getElementById('newPromptContext').value = prompt.context || '';
-                
-                // 修改模态框标题和按钮
-                document.querySelector('#addPromptModal .modal-header h2').textContent = '编辑Prompt';
-                document.querySelector('#addPromptModal button:last-child').textContent = '保存修改';
-                
-                // 禁用ID输入框
-                document.getElementById('newPromptId').disabled = true;
-                
-                showAddPromptModal();
-            } catch (error) {
-                console.error('获取prompt详情失败:', error);
-                alert('获取prompt详情失败');
-            }
+            
+            // 获取当前prompt的详细信息
+            fetch(`/api/prompts/${type}/${id}`)
+                .then(response => response.json())
+                .then(prompt => {
+                    document.getElementById('newPromptName').value = prompt.name;
+                    document.getElementById('newPromptContent').value = prompt.prompt;
+                    document.getElementById('newPromptContext').value = prompt.context || '';
+                    
+                    // 更改模态框标题和按钮文本
+                    document.querySelector('#addPromptModal .modal-header h2').textContent = '编辑Prompt';
+                    document.querySelector('#addPromptModal button#savePromptButton').textContent = '保存修改';
+                    
+                    // 显示模态框
+                    document.getElementById('addPromptModal').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('获取prompt详情失败:', error);
+                    alert('获取prompt详情失败');
+                });
         }
 
         // 修改handlePromptChange函数
@@ -1576,6 +1582,97 @@
                     card.style.display = 'none';
                 }
             });
+        }
+
+        // 在合适的位置添加关闭按钮的代码
+        function closeAllModals() {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                modal.style.display = 'none';
+            });
+        }
+
+        // 添加关闭按钮到每个模态框
+        document.querySelectorAll('.modal').forEach(modal => {
+            const closeButton = document.createElement('button');
+            closeButton.className = 'modal-close';
+            closeButton.innerHTML = '&times;';
+            closeButton.onclick = () => modal.style.display = 'none';
+            modal.querySelector('.modal-header').appendChild(closeButton);
+        });
+
+        // 修改编辑prompt的函数
+        async function editSelectedPrompt() {
+            const promptSelect = document.getElementById('promptSelect');
+            if (!promptSelect.value) {
+                alert('请先选择一个prompt');
+                return;
+            }
+
+            const [type, id] = promptSelect.value.split(':');
+            
+            // 获取当前prompt的详细信息
+            fetch(`/api/prompts/${type}/${id}`)
+                .then(response => response.json())
+                .then(prompt => {
+                    document.getElementById('newPromptName').value = prompt.name;
+                    document.getElementById('newPromptContent').value = prompt.prompt;
+                    document.getElementById('newPromptContext').value = prompt.context || '';
+                    
+                    // 更改模态框标题和按钮文本
+                    document.querySelector('#addPromptModal .modal-header h2').textContent = '编辑Prompt';
+                    document.querySelector('#addPromptModal button#savePromptButton').textContent = '保存修改';
+                    
+                    // 显示模态框
+                    document.getElementById('addPromptModal').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('获取prompt详情失败:', error);
+                    alert('获取prompt详情失败');
+                });
+        }
+
+        // 修改保存prompt的函数
+        async function saveNewPrompt() {
+            const typeSelect = document.getElementById('promptTypeSelect');
+            const isEdit = document.querySelector('#addPromptModal .modal-header h2')
+                .textContent.includes('编辑');
+            
+            const data = {
+                name: document.getElementById('newPromptName').value,
+                prompt: document.getElementById('newPromptContent').value,
+                context: document.getElementById('newPromptContext').value,
+                type: typeSelect.value
+            };
+
+            if (!data.name || !data.prompt || !data.type) {
+                alert('请填写��要字段');
+                return;
+            }
+
+            const method = isEdit ? 'PUT' : 'POST';
+            const url = isEdit ? 
+                `/api/prompts/${data.type}/${encodeURIComponent(data.name)}` : 
+                '/api/prompts';
+            
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    alert(isEdit ? '修改成功' : '添加成功');
+                    closeAddPromptModal();
+                    handleTypeChange(); // 刷新prompt列表
+                } else {
+                    throw new Error(isEdit ? '修改失败' : '添加失败');
+                }
+            } catch (error) {
+                console.error('操作失败:', error);
+                alert(error.message);
+            }
         }
     </script>
 </body>

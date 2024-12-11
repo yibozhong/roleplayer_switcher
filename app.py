@@ -37,32 +37,27 @@ def chat():
     data = request.json
     user_message = data.get('message')
     prompt_type = data.get('prompt_type')
-    prompt_id = data.get('prompt_id')
+    prompt_name = data.get('prompt_name')
     
-    if not all([user_message, prompt_type, prompt_id]):
-        return jsonify({'error': '缺少必要参数'}), 400
-    
-    # 根据类型获取对应的prompt
+    # 获取prompt内容
+    prompt = None
     if prompt_type == 'general':
-        prompt = personality_manager.get_general_prompt(prompt_id)
+        prompt = personality_manager.general_prompts.get(prompt_name)
     elif prompt_type == 'category':
-        prompt = personality_manager.get_category(prompt_id)
+        prompt = personality_manager.category_prompts.get(prompt_name)
     elif prompt_type == 'role':
-        prompt = personality_manager.get_role(prompt_id)
-    else:
-        return jsonify({'error': '无效的prompt类型'}), 400
+        prompt = personality_manager.role_prompts.get(prompt_name)
     
     if not prompt:
         return jsonify({'error': '未找到指定的prompt'}), 404
+
+    # 获取背景知识
+    context = personality_manager._get_context(prompt_name)
+    system_message = prompt.get('prompt', '')
     
-    # 获取prompt内容和上下文
-    prompt_content = prompt.get('prompt', '')
-    context = prompt.get('context', '')
-    
-    # 组合prompt和上下文
-    system_message = prompt_content
+    # 如果有背景知识就加上
     if context:
-        system_message = f"背景信息：{context}\n\n角色设定：{prompt_content}"
+        system_message = f"背景知识：\n{context}\n\n角色设定：\n{system_message}"
 
     # 调用Deepseek API
     api_key = os.getenv('DEEPSEEK_API_KEY')
@@ -151,7 +146,7 @@ def update_delete_personality(personality_id):
 def get_prompt_types():
     """获取所有prompt类型"""
     return jsonify({
-        'general': {'name': '通用Prompt', 'description': '基础AI设���和行为准则'},
+        'general': {'name': '通用Prompt', 'description': '基础AI设定和行为准则'},
         'category': {'name': '角色大类Prompt', 'description': '不同类型角色的共同特征'},
         'role': {'name': '具体角色Prompt', 'description': '特定角色的个性化设定'}
     })
@@ -178,21 +173,24 @@ def search_prompts():
     results = personality_manager.search_prompts(query)
     return jsonify(results)
 
-@app.route('/api/prompts/<prompt_type>/<prompt_id>', methods=['GET', 'PUT'])
-def manage_prompt(prompt_type, prompt_id):
+@app.route('/api/prompts/<prompt_type>/<name>', methods=['GET', 'PUT'])
+def manage_prompt(prompt_type, name):
     """获取或更新prompt信息"""
     if request.method == 'GET':
+        prompt = None
         if prompt_type == 'general':
-            prompt = personality_manager.get_general_prompt(prompt_id)
+            prompt = personality_manager.general_prompts.get(name)
         elif prompt_type == 'category':
-            prompt = personality_manager.get_category(prompt_id)
+            prompt = personality_manager.category_prompts.get(name)
         elif prompt_type == 'role':
-            prompt = personality_manager.get_role(prompt_id)
-        else:
-            return jsonify({'error': '无效的prompt类型'}), 400
-        
+            prompt = personality_manager.role_prompts.get(name)
+
         if not prompt:
             return jsonify({'error': '未找到指定的prompt'}), 404
+
+        # 获取背景知识
+        context = personality_manager._get_context(name)
+        prompt['context'] = context
         
         return jsonify(prompt)
     
@@ -202,29 +200,12 @@ def manage_prompt(prompt_type, prompt_id):
             return jsonify({'error': '请提供更新内容'}), 400
         
         try:
-            if prompt_type == 'general':
-                success = personality_manager.update_general_prompt(
-                    prompt_id, 
-                    name=data.get('name'),
-                    prompt=data.get('prompt'),  # 修改这里：prompt_content -> prompt
-                    context=data.get('context', '')  # 确保context为空字符串而不是None
-                )
-            elif prompt_type == 'category':
-                success = personality_manager.update_category_prompt(
-                    prompt_id, 
-                    name=data.get('name'),
-                    prompt=data.get('prompt'),  # 修改这里：prompt_content -> prompt
-                    context=data.get('context', '')  # 确保context为空字符串而不是None
-                )
-            elif prompt_type == 'role':
-                success = personality_manager.update_role_prompt(
-                    prompt_id, 
-                    name=data.get('name'),
-                    prompt=data.get('prompt'),  # 修改这里：prompt_content -> prompt
-                    context=data.get('context', '')  # 确保context为空字符串而不是None
-                )
-            else:
-                return jsonify({'error': '无效的prompt类型'}), 400
+            success = personality_manager.update_prompt(
+                prompt_type,
+                name,
+                data.get('prompt', ''),
+                data.get('context', '')
+            )
 
             if success:
                 return jsonify({'message': '更新成功'})
@@ -261,21 +242,24 @@ def add_prompt():
     """添加新的prompt"""
     data = request.json
     prompt_type = data.get('type')
+    name = data.get('name')
+    prompt_content = data.get('prompt')
+    context = data.get('context')
+    
+    if not all([prompt_type, name, prompt_content]):
+        return jsonify({'error': '缺少必要字段'}), 400
     
     try:
-        if prompt_type == 'general':
-            personality_manager.add_general_prompt(
-                data['id'], data['name'], data['prompt'], data.get('context'))
-        elif prompt_type == 'category':
-            personality_manager.add_category_prompt(
-                data['id'], data['name'], data['prompt'], data.get('context'))
-        elif prompt_type == 'role':
-            personality_manager.add_role(
-                data['id'], data['name'], data['prompt'], data.get('context'))
-        else:
-            return jsonify({'error': '无效的prompt类型'}), 400
+        success = personality_manager.update_prompt(
+            prompt_type, 
+            name, 
+            prompt_content, 
+            context
+        )
         
-        return jsonify({'message': '添加成功'}), 201
+        if success:
+            return jsonify({'message': '添加成功'}), 201
+        return jsonify({'error': '添加失败'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
