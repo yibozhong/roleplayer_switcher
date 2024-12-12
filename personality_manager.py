@@ -20,7 +20,7 @@ class PersonalityManager:
             print(f"错误: 找不到配置文件 {filepath}")
             raise FileNotFoundError(f"配置文件 {filepath} 不存在")
         except json.JSONDecodeError:
-            print(f"错误: 配��文件 {filepath} 格式不正确")
+            print(f"错误: 配������文件 {filepath} 格式不正确")
             raise json.JSONDecodeError(f"配置文件 {filepath} 格式不正确")
 
     def _save_config(self, data, filename):
@@ -30,10 +30,14 @@ class PersonalityManager:
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
 
-    def _get_context(self, prompt_type, prompt_id):
+    def _get_context(self, prompt_type, prompt_name):
         """获取prompt的上下文信息"""
         try:
-            return self.prompt_context.get(prompt_type, {}).get(prompt_id, {}).get('context', '')
+            if prompt_type not in self.prompt_context:
+                return ''
+            if prompt_name not in self.prompt_context[prompt_type]:
+                return ''
+            return self.prompt_context[prompt_type][prompt_name].get('context', '')
         except Exception:
             return ''
 
@@ -43,7 +47,7 @@ class PersonalityManager:
 
     def get_general_prompt(self, prompt_id):
         """获取指定的通用prompt"""
-        prompt = self.general_prompts.get(prompt_id, {})
+        prompt = self.general_prompts.get(prompt_id, {}).copy()  # 创建副本避免修改原始数据
         if prompt:
             context = self._get_context('general', prompt_id)
             if context:
@@ -66,7 +70,7 @@ class PersonalityManager:
 
     def get_category(self, category_id):
         """获取指定角色大类的设定"""
-        category = self.category_prompts.get(category_id, {})
+        category = self.category_prompts.get(category_id, {}).copy()
         if category:
             context = self._get_context('category', category_id)
             if context:
@@ -95,8 +99,12 @@ class PersonalityManager:
         """保存prompt的上下文信息"""
         if prompt_type not in self.prompt_context:
             self.prompt_context[prompt_type] = {}
-        self.prompt_context[prompt_id] = {'context': context}
+        if prompt_id not in self.prompt_context[prompt_type]:
+            self.prompt_context[prompt_type][prompt_id] = {}
+        
+        self.prompt_context[prompt_type][prompt_id]['context'] = context
         self._save_config(self.prompt_context, 'prompt_context.json')
+        return True
 
     # 具体角色Prompt相关方法
     def get_all_roles(self):
@@ -105,7 +113,7 @@ class PersonalityManager:
 
     def get_role(self, role_id):
         """获取指定具体角色的设定，包括类别信息"""
-        role = self.role_prompts.get(role_id, {})
+        role = self.role_prompts.get(role_id, {}).copy()
         if role:
             # 添加类别信息
             category_id = role.get('category')
@@ -319,16 +327,6 @@ class PersonalityManager:
         self._save_config(self.role_prompts, 'role_prompts.json')
         return True
 
-    def _get_context(self, prompt_name):
-        """直接通过prompt名称获取背景知识"""
-        return self.prompt_context.get(prompt_name, '')
-
-    def _save_context(self, prompt_name, context):
-        """保存prompt的背景知识"""
-        self.prompt_context[prompt_name] = context
-        self._save_config(self.prompt_context, 'prompt_context.json')
-        return True
-
     def update_prompt(self, prompt_type, name, content, context=''):
         """统一的更新prompt方法"""
         prompt_data = {
@@ -348,6 +346,6 @@ class PersonalityManager:
         else:
             return False
             
-        if context is not None:
-            self._save_context(name, context)
+        if context:
+            self._save_prompt_context(prompt_type, name, context)
         return True

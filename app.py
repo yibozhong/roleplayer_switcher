@@ -7,12 +7,11 @@ from personality_manager import PersonalityManager
 # 加载环境变量
 load_dotenv()
 
-# 检查必要的配置文��是否存在
+# 检查必要的配置文件是否存在
 required_configs = [
     'config/general_prompts.json',
     'config/category_prompts.json',
     'config/role_prompts.json',
-    'config/prompt_context.json'
 ]
 
 for config_file in required_configs:
@@ -34,59 +33,74 @@ def home():
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    data = request.json
-    user_message = data.get('message')
-    prompt_type = data.get('prompt_type')
-    prompt_name = data.get('prompt_name')
-    
-    # 获取prompt内容
-    prompt = None
-    if prompt_type == 'general':
-        prompt = personality_manager.general_prompts.get(prompt_name)
-    elif prompt_type == 'category':
-        prompt = personality_manager.category_prompts.get(prompt_name)
-    elif prompt_type == 'role':
-        prompt = personality_manager.role_prompts.get(prompt_name)
-    
-    if not prompt:
-        return jsonify({'error': '未找到指定的prompt'}), 404
-
-    # 获取背景知识
-    context = personality_manager._get_context(prompt_name)
-    system_message = prompt.get('prompt', '')
-    
-    # 如果有背景知识就加上
-    if context:
-        system_message = f"背景知识：\n{context}\n\n角色设定：\n{system_message}"
-
-    # 调用Deepseek API
-    api_key = os.getenv('DEEPSEEK_API_KEY')
-    if not api_key:
-        return jsonify({'error': '未设置API密钥'}), 500
-    
-    headers = {
-        'Authorization': f'Bearer {api_key}',
-        'Content-Type': 'application/json'
-    }
-    
-    payload = {
-        'model': 'deepseek-chat',
-        'messages': [
-            {'role': 'system', 'content': system_message},
-            {'role': 'user', 'content': user_message}
-        ]
-    }
-    
     try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': '无效的请求数据'}), 400
+            
+        message = data.get('message')
+        prompt_id = data.get('prompt_id')
+        
+        if not message or not prompt_id:
+            return jsonify({'error': '消息和prompt_id不能为空'}), 400
+            
+        # 解析 prompt_id (format: type:id)
+        try:
+            prompt_type, prompt_id = prompt_id.split(':')
+        except ValueError:
+            return jsonify({'error': '无效的prompt_id格式'}), 400
+            
+        # 获取对应的prompt
+        prompt = None
+        if prompt_type == 'general':
+            prompt = personality_manager.get_general_prompt(prompt_id)
+        elif prompt_type == 'category':
+            prompt = personality_manager.get_category(prompt_id)
+        elif prompt_type == 'role':
+            prompt = personality_manager.get_role(prompt_id)
+        else:
+            return jsonify({'error': '无效的prompt类型'}), 400
+            
+        if not prompt:
+            return jsonify({'error': '未找到指定的prompt'}), 404
+            
+        # 构建系统消息
+        system_message = prompt.get('prompt', '')
+        if prompt.get('context'):
+            system_message = f"背景知识：\n{prompt['context']}\n\n角色设定：\n{system_message}"
+            
+        # 调用API
+        api_key = os.getenv('DEEPSEEK_API_KEY')
+        if not api_key:
+            return jsonify({'error': 'API密钥未设置'}), 500
+            
         response = requests.post(
-            'https://api.deepseek.com/v1/chat/completions',  # 替换为实际的API地址
-            headers=headers,
-            json=payload
+            'https://api.deepseek.com/v1/chat/completions',
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'model': 'deepseek-chat',
+                'messages': [
+                    {'role': 'system', 'content': system_message},
+                    {'role': 'user', 'content': message}
+                ]
+            },
+            timeout=30
         )
+        
         response.raise_for_status()
-        return jsonify(response.json())
-    except requests.exceptions.RequestException as e:
-        return jsonify({'error': str(e)}), 500
+        result = response.json()
+        
+        ai_message = result['choices'][0]['message']['content']
+        return jsonify({'response': ai_message})
+        
+    except requests.RequestException as e:
+        return jsonify({'error': f'API请求失败: {str(e)}'}), 500
+    except Exception as e:
+        return jsonify({'error': f'发生错误: {str(e)}'}), 500
 
 # 获取所有角色列表
 @app.route('/api/personalities', methods=['GET'])
@@ -179,19 +193,15 @@ def manage_prompt(prompt_type, name):
     if request.method == 'GET':
         prompt = None
         if prompt_type == 'general':
-            prompt = personality_manager.general_prompts.get(name)
+            prompt = personality_manager.get_general_prompt(name)
         elif prompt_type == 'category':
-            prompt = personality_manager.category_prompts.get(name)
+            prompt = personality_manager.get_category(name)
         elif prompt_type == 'role':
-            prompt = personality_manager.role_prompts.get(name)
+            prompt = personality_manager.get_role(name)
 
         if not prompt:
             return jsonify({'error': '未找到指定的prompt'}), 404
-
-        # 获取背景知识
-        context = personality_manager._get_context(name)
-        prompt['context'] = context
-        
+            
         return jsonify(prompt)
     
     elif request.method == 'PUT':
@@ -262,6 +272,49 @@ def add_prompt():
         return jsonify({'error': '添加失败'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 400
+
+# 添加新的路由用于处理 API 密钥
+@app.route('/api/settings/api_key', methods=['GET', 'POST'])
+def manage_api_key():
+    if request.method == 'GET':
+        api_key = os.getenv('DEEPSEEK_API_KEY', '')
+        return jsonify({'api_key': api_key})
+    
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            api_key = data.get('api_key', '').strip()
+            
+            if not api_key:
+                return jsonify({'error': 'API密钥不能为空'}), 400
+
+            # 保存到 .env 文件
+            env_path = os.path.join(os.path.dirname(__file__), '.env')
+            
+            # 读取现有的环境变量
+            env_vars = {}
+            if os.path.exists(env_path):
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if '=' in line:
+                            key, value = line.strip().split('=', 1)
+                            env_vars[key] = value
+            
+            # 更新 API 密钥
+            env_vars['DEEPSEEK_API_KEY'] = api_key
+            
+            # 保存回文件
+            with open(env_path, 'w', encoding='utf-8') as f:
+                for key, value in env_vars.items():
+                    f.write(f'{key}={value}\n')
+            
+            # 更新当前环境变量
+            os.environ['DEEPSEEK_API_KEY'] = api_key
+            
+            return jsonify({'message': 'API密钥已更新'})
+            
+        except Exception as e:
+            return jsonify({'error': f'设置API密钥失败: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

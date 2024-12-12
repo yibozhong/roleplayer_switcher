@@ -664,6 +664,33 @@
             color: #666;
             margin-bottom: 20px;
         }
+
+        .settings-button {
+            margin-top: 20px;
+            background-color: #f8f9fa;
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+        }
+
+        .settings-button:hover {
+            background-color: var(--primary-light);
+            color: var(--primary-color);
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .help-text a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        .help-text a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -698,6 +725,7 @@
             <button onclick="showAddPromptModal()" class="add-prompt-button">添加新Prompt</button>
         </div>
         <button class="personality-list-button" onclick="openPersonalityList()">查看所有角色</button>
+        <button class="settings-button" onclick="showApiKeyModal()">设置 API 密钥</button>
     </div>
 
     <!-- 主聊天区域 -->
@@ -706,8 +734,13 @@
             <div id="chatMessages"></div>
             <div class="input-area">
                 <div class="input-group">
-                    <textarea id="userInput" placeholder="输入消息..." rows="3" onkeypress="if(event.keyCode==13 && !event.shiftKey) { event.preventDefault(); sendMessage(); }"></textarea>
-                    <button onclick="sendMessage()">发送</button>
+                    <textarea 
+                        id="userInput" 
+                        placeholder="输入消息..." 
+                        rows="3"
+                        onkeydown="if(event.keyCode === 13 && !event.shiftKey) { event.preventDefault(); sendMessage(); }">
+                    </textarea>
+                    <button id="sendButton" onclick="sendMessage()">发送</button>
                 </div>
             </div>
         </div>
@@ -776,6 +809,22 @@
                 <textarea id="newPromptContext"></textarea>
             </div>
             <button onclick="saveNewPrompt()" id="savePromptButton">保存</button>
+        </div>
+    </div>
+
+    <!-- 添加 API 密钥设置模态框 -->
+    <div class="modal" id="apiKeyModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>设置 API 密钥</h2>
+                <button class="modal-close" onclick="closeApiKeyModal()">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="apiKeyInput">Deepseek API 密钥</label>
+                <input type="password" id="apiKeyInput" required>
+                <p class="help-text">请输入您的 Deepseek API 密钥。如果没有，请前往 <a href="https://deepseek.com" target="_blank">Deepseek</a> 申请。</p>
+            </div>
+            <button onclick="saveApiKey()">保存</button>
         </div>
     </div>
 
@@ -936,28 +985,35 @@
 
         // 聊天相关功能
         async function sendMessage() {
+            // 获取必要的元素
+            const userInput = document.getElementById('userInput');
+            const sendButton = document.getElementById('sendButton');
             const promptSelect = document.getElementById('promptSelect');
-            const selectedPrompt = promptSelect.value;
             
-            if (!selectedPrompt) {
-                alert('请先选择一个Prompt');
+            // 获取用户输入的消息
+            const message = userInput.value.trim();
+            
+            // 检查是否选择了prompt
+            if (!promptSelect.value) {
+                alert('请先选择一个角色或prompt');
                 return;
             }
             
-            const [type, id] = selectedPrompt.split(':');
-            const userInput = document.getElementById('userInput');
-            const message = userInput.value.trim();
-            
+            // 检查消息是否为空
             if (!message) {
                 alert('请输入消息');
                 return;
             }
-
-            // 添加用户消息到聊天界面
-            appendMessage('user', message);
-            userInput.value = '';
-
+            
             try {
+                // 禁用输入和发送按钮
+                userInput.disabled = true;
+                sendButton.disabled = true;
+                
+                // 显示用户消息
+                appendMessage('user', message);
+                
+                // 发送消息到后端
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: {
@@ -965,23 +1021,69 @@
                     },
                     body: JSON.stringify({
                         message: message,
-                        prompt_type: type,
-                        prompt_id: id
+                        prompt_id: promptSelect.value
                     })
                 });
-
-                if (!response.ok) {
-                    throw new Error('API请求失败');
-                }
-
+                
+                // 清空输入框
+                userInput.value = '';
+                
+                // 处理响应
                 const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || '发送消息失败');
+                }
+                
+                // 显示AI回复
                 appendMessage('ai', data.response);
+                
             } catch (error) {
                 console.error('发送消息失败:', error);
-                appendMessage('system', '发送消息失败，请重试');
+                appendMessage('system', `错误: ${error.message}`);
+            } finally {
+                // 重新启用输入和发送按钮
+                userInput.disabled = false;
+                sendButton.disabled = false;
+                userInput.focus();
             }
         }
-        
+
+        function appendMessage(role, content) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}-message`;
+            
+            if (role === 'user') {
+                // 用户消息
+                messageDiv.textContent = content;
+            } else if (role === 'ai') {
+                // AI消息，需要解析markdown
+                const header = document.createElement('div');
+                header.className = 'message-header';
+                header.textContent = '助手';
+                
+                const body = document.createElement('div');
+                body.className = 'markdown-body';
+                body.innerHTML = marked.parse(content);
+                
+                messageDiv.appendChild(header);
+                messageDiv.appendChild(body);
+                
+                // 代码高亮
+                messageDiv.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
+            } else if (role === 'system') {
+                // 系统消息（错误等）
+                messageDiv.classList.add('system-message');
+                messageDiv.textContent = content;
+            }
+            
+            chatMessages.appendChild(messageDiv);
+            messageDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+
         // 支持按Enter发送消息
         document.getElementById('userInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -1464,7 +1566,7 @@
         async function editSelectedPrompt() {
             const promptSelect = document.getElementById('promptSelect');
             if (!promptSelect.value) {
-                alert('请先选择一个prompt');
+                alert('请先选���一个prompt');
                 return;
             }
 
@@ -1646,7 +1748,7 @@
             };
 
             if (!data.name || !data.prompt || !data.type) {
-                alert('请填写��要字段');
+                alert('请填写必要字段');
                 return;
             }
 
@@ -1671,6 +1773,95 @@
                 }
             } catch (error) {
                 console.error('操作失败:', error);
+                alert(error.message);
+            }
+        }
+
+        function appendMessage(role, content) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}-message`;
+            
+            if (role === 'user') {
+                // 用户消息
+                messageDiv.textContent = content;
+            } else if (role === 'ai') {
+                // AI消息，需要解析markdown
+                const header = document.createElement('div');
+                header.className = 'message-header';
+                header.textContent = '助手';
+                
+                const body = document.createElement('div');
+                body.className = 'markdown-body';
+                body.innerHTML = marked.parse(content);
+                
+                messageDiv.appendChild(header);
+                messageDiv.appendChild(body);
+                
+                // 代码高亮
+                messageDiv.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
+            } else if (role === 'system') {
+                // 系统消息（错误等）
+                messageDiv.classList.add('system-message');
+                messageDiv.textContent = content;
+            }
+            
+            chatMessages.appendChild(messageDiv);
+            messageDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+
+        // 显示 API 密钥设置模态框
+        async function showApiKeyModal() {
+            const modal = document.getElementById('apiKeyModal');
+            const input = document.getElementById('apiKeyInput');
+            
+            try {
+                const response = await fetch('/api/settings/api_key');
+                const data = await response.json();
+                input.value = data.api_key;
+            } catch (error) {
+                console.error('获取API密钥失败:', error);
+            }
+            
+            modal.style.display = 'block';
+        }
+
+        // 关闭 API 密钥设置模态框
+        function closeApiKeyModal() {
+            document.getElementById('apiKeyModal').style.display = 'none';
+        }
+
+        // 保存 API 密钥
+        async function saveApiKey() {
+            const input = document.getElementById('apiKeyInput');
+            const apiKey = input.value.trim();
+            
+            if (!apiKey) {
+                alert('请输入 API 密钥');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/settings/api_key', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ api_key: apiKey })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert('API密钥已更新');
+                    closeApiKeyModal();
+                } else {
+                    throw new Error(data.error || '保存失败');
+                }
+            } catch (error) {
+                console.error('保存API密钥失败:', error);
                 alert(error.message);
             }
         }
