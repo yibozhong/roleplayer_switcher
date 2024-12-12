@@ -20,7 +20,7 @@ class PersonalityManager:
             print(f"错误: 找不到配置文件 {filepath}")
             raise FileNotFoundError(f"配置文件 {filepath} 不存在")
         except json.JSONDecodeError:
-            print(f"错误: 配������文件 {filepath} 格式不正确")
+            print(f"错误: 配置文件 {filepath} 格式不正确")
             raise json.JSONDecodeError(f"配置文件 {filepath} 格式不正确")
 
     def _save_config(self, data, filename):
@@ -65,7 +65,7 @@ class PersonalityManager:
         self._save_config(self.general_prompts, 'general_prompts.json')
 
     def get_all_categories(self):
-        """���取所有角色大类"""
+        """获取所有角色大类"""
         return self.category_prompts
 
     def get_category(self, category_id):
